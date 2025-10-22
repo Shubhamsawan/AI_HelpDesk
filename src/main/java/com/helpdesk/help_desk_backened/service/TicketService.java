@@ -1,9 +1,8 @@
-package com.substring.helpdesk.help_desk_backened.service;
+package com.helpdesk.help_desk_backened.service;
 
-import com.substring.helpdesk.help_desk_backened.entity.Ticket;
-import com.substring.helpdesk.help_desk_backened.repository.TicketRepository;
+import com.helpdesk.help_desk_backened.entity.Ticket;
+import com.helpdesk.help_desk_backened.repository.TicketRepository;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import org.springframework.stereotype.Service;
 

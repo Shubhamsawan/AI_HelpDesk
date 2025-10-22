@@ -1,7 +1,7 @@
-package com.substring.helpdesk.help_desk_backened.entity;
+package com.helpdesk.help_desk_backened.entity;
 
-import com.substring.helpdesk.help_desk_backened.enums.Priority;
-import com.substring.helpdesk.help_desk_backened.enums.Status;
+import com.helpdesk.help_desk_backened.enums.Priority;
+import com.helpdesk.help_desk_backened.enums.Status;
 import jakarta.persistence.*;
 import lombok.*;
 

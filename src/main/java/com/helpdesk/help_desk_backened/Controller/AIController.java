@@ -1,7 +1,9 @@
-package com.substring.helpdesk.help_desk_backened.Controller;
+package com.helpdesk.help_desk_backened.Controller;
 
-import com.substring.helpdesk.help_desk_backened.service.AIService;
-import lombok.RequiredArgsConstructor;
+import com.helpdesk.help_desk_backened.service.AIService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -18,6 +20,11 @@ public class AIController {
         this.aiService = aiService;
     }
 
+
+    @Operation(summary = "Get AI response")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "AI response returned")
+    })
     @PostMapping
     public ResponseEntity<String> getResponse(@RequestBody String query){
         return ResponseEntity.ok(aiService.getResponseFromAssistant(query));
