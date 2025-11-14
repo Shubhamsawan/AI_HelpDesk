@@ -9,7 +9,7 @@ import lombok.Setter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.*;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.core.io.Resource;
 
 import java.io.InputStream;
@@ -22,100 +22,31 @@ import java.util.Map;
 @Setter
 public class AIService {
 
-//    @Value("${spring.ai.google.genai.project-id}")
-//    private String projectId;
-
-//    private final ChatClient chatClient;
-//
-//    public AIService(TicketDatabaseTool ticketDatabaseTool, ChatClient chatClient) {
-//        this.ticketDatabaseTool = ticketDatabaseTool;
-//        this.chatClient = chatClient;
-//    }
-//
-//    public String getResponseFromAssistant(String query) {
-//        try {
-//            ChatResponse response = chatClient
-//                    .prompt()
-//                    .tools(ticketDatabaseTool)
-//                    .user(query)
-//                    .call()
-//                    .chatResponse();
-//
-//            if (response != null && !response.getResults().isEmpty()) {
-//                return response.getResult().getOutput().getText();
-//            } else {
-//                return "No valid response from Gemini.";
-//            }
-//
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//            return "Error contacting Gemini: " + e.getMessage();
-//        }
-//    }
-
-
     private final RestTemplate restTemplate;
-    private final String geminiApiUrl;
-    private final String geminiApiKey;
+    private final String groqApiUrl;
+    private final String groqApiKey;
     private final TicketDatabaseTool ticketDatabaseTool;
     private final ChatMemoryService chatMemoryService;
 
     @Value("classpath:/helpdesk-system.st")
     private Resource systemPromptResources;
-    public AIService(RestTemplate restTemplate, @Value("${gemini.api.url}") String geminiApiUrl,
-                     @Value("${gemini.api.key}") String geminiApiKey, TicketDatabaseTool ticketDatabaseTool, ChatMemoryService chatMemoryService) {
+
+    public AIService(RestTemplate restTemplate,
+                     @Value("${groq.api.url}") String groqApiUrl,
+                     @Value("${groq.api.key}") String groqApiKey,
+                     TicketDatabaseTool ticketDatabaseTool,
+                     ChatMemoryService chatMemoryService) {
+
         this.restTemplate = restTemplate;
-        this.geminiApiUrl = geminiApiUrl;
-        this.geminiApiKey = geminiApiKey;
+        this.groqApiUrl = groqApiUrl;
+        this.groqApiKey = groqApiKey;
         this.ticketDatabaseTool = ticketDatabaseTool;
         this.chatMemoryService = chatMemoryService;
     }
 
-//    public String getResponseFromAssistant(String query) {
-//        try {
-//            // Load your system prompt file (acts like .system())
-//            String systemPrompt;
-//            try (InputStream inputStream = systemPromptResources.getInputStream()) {
-//                systemPrompt = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
-//                System.err.println("systemPrompt "+systemPrompt);
-//            }
-//
-//            // Preprocess the query and enrich with DB info
-//            String context = enrichQueryWithTicketData(query);
-//
-//            // Combine system + user query
-//            String combinedPrompt = systemPrompt + "\n\nUser query:\n" + context;
-//
-//            Map<String, Object> body = Map.of(
-//                    "contents", List.of(
-//                            Map.of("parts", List.of(Map.of("text", combinedPrompt)))
-//                    )
-//            );
-//
-//            HttpHeaders headers = new HttpHeaders();
-//            headers.setContentType(MediaType.APPLICATION_JSON);
-//
-//            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-//            String url = geminiApiUrl + "?key=" + geminiApiKey;
-//
-//            ResponseEntity<Map> response = restTemplate.postForEntity(url, request, Map.class);
-//
-//            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-//                List<Map<String, Object>> candidates = (List<Map<String, Object>>) response.getBody().get("candidates");
-//                if (candidates != null && !candidates.isEmpty()) {
-//                    Map<String, Object> content = (Map<String, Object>) candidates.get(0).get("content");
-//                    List<Map<String, Object>> parts = (List<Map<String, Object>>) content.get("parts");
-//                    return parts.get(0).get("text").toString();
-//                }
-//            }
-//
-//            return "No valid response from Gemini.";
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//            return "Error contacting Gemini: " + e.getMessage();
-//        }
-//    }
-
+    /**
+     * Main AI response generator (Groq API)
+     */
     public String getResponseFromAssistant(String query) {
         try {
             // Load system prompt
@@ -124,61 +55,67 @@ public class AIService {
                 systemPrompt = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
             }
 
-            // Add user query to memory
+            // Save user msg
             chatMemoryService.addMessage(query, "User", query);
 
-            // Enrich query with ticket data
+            // Enrich with DB data
             String enrichedQuery = enrichQueryWithTicketData(query);
 
-            // Build full context (system + memory + new query)
-            String conversationContext = chatMemoryService.getConversationContext(query);
-            String combinedPrompt = systemPrompt + "\n\nPrevious conversation:\n" + conversationContext +
-                    "\n\nNew user message:\n" + enrichedQuery;
+            // Add memory
+            String memory = chatMemoryService.getConversationContext(query);
 
-            // Prepare Gemini API request
+            // Final prompt
+            String finalPrompt = systemPrompt +
+                    "\n\nPrevious conversation:\n" + memory +
+                    "\n\nUser message:\n" + enrichedQuery;
+
+            // Build Groq Request
             Map<String, Object> body = Map.of(
-                    "contents", List.of(
-                            Map.of("parts", List.of(Map.of("text", combinedPrompt)))
+                    "model", "llama-3.1-8b-instant",
+                    "messages", List.of(
+                            Map.of("role", "system", "content", systemPrompt),
+                            Map.of("role", "user", "content", finalPrompt)
                     )
             );
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("Authorization", "Bearer " + groqApiKey);
 
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-            String url = geminiApiUrl + "?key=" + geminiApiKey;
 
-            ResponseEntity<Map> response = restTemplate.postForEntity(url, request, Map.class);
+            ResponseEntity<Map> response =
+                    restTemplate.postForEntity(groqApiUrl, request, Map.class);
 
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                List<Map<String, Object>> candidates =
-                        (List<Map<String, Object>>) response.getBody().get("candidates");
-                if (candidates != null && !candidates.isEmpty()) {
-                    Map<String, Object> content = (Map<String, Object>) candidates.get(0).get("content");
-                    List<Map<String, Object>> parts = (List<Map<String, Object>>) content.get("parts");
-                    String aiResponse = parts.get(0).get("text").toString();
 
-                    // Store AI response in memory
-                    chatMemoryService.addMessage(query, "Assistant", aiResponse);
+                List<Map<String, Object>> choices =
+                        (List<Map<String, Object>>) response.getBody().get("choices");
 
-                    return aiResponse;
-                }
+                Map<String, Object> msg =
+                        (Map<String, Object>) choices.get(0).get("message");
+
+                String aiResponse = msg.get("content").toString();
+
+                // save AI response
+                chatMemoryService.addMessage(query, "Assistant", aiResponse);
+
+                return aiResponse;
             }
 
-            return "No valid response from Gemini.";
+            return "No response from AI.";
         } catch (Exception e) {
             e.printStackTrace();
-            return "Error contacting Gemini: " + e.getMessage();
+            return "AI Error: " + e.getMessage();
         }
     }
 
-
     /**
-     * Add ticket info from your database to enrich Gemini's context.
+     * Your original ticket enrichment logic (unchanged)
      */
     private String enrichQueryWithTicketData(String query) {
         String lower = query.toLowerCase();
-        System.out.println("lower " + lower);
+
         try {
             if (lower.contains("create ticket")) {
 
@@ -197,11 +134,11 @@ public class AIService {
                         (priorityStr != null ? priorityStr.toUpperCase() : "LOW")
                 );
 
-                // Check if similar ticket exists
-                Ticket existingTicket = ticketDatabaseTool.getTicketByUserName(username);
-                if (existingTicket != null &&
-                        existingTicket.getSummary().equalsIgnoreCase(summary)) {
-                    return "A similar ticket already exists: " + existingTicket;
+                // Check duplicate ticket
+                Ticket existing = ticketDatabaseTool.getTicketByUserName(username);
+                if (existing != null &&
+                        existing.getSummary().equalsIgnoreCase(summary)) {
+                    return "A similar ticket exists: " + existing;
                 }
 
                 Ticket newTicket = new Ticket();
@@ -213,31 +150,71 @@ public class AIService {
                 newTicket.setPriority(priority);
                 newTicket.setStatus(Status.OPEN);
 
-                Ticket savedTicket = ticketDatabaseTool.createTicketTool(newTicket);
+                Ticket saved = ticketDatabaseTool.createTicketTool(newTicket);
 
-                return "✅ New ticket created successfully:\n" +
-                        "ID: " + savedTicket.getId() + "\n" +
-                        "Summary: " + savedTicket.getSummary() + "\n" +
-                        "Priority: " + savedTicket.getPriority() + "\n" +
-                        "Category: " + savedTicket.getCategory() + "\n" +
-                        "Email: " + savedTicket.getEmail() + "\n" +
-                        "Status: " + savedTicket.getStatus() + "\n" +
-                        "Created On: " + savedTicket.getCreatedOn();
+                return "New Ticket Created:\n" +
+                        "ID: " + saved.getId() + "\n" +
+                        "Summary: " + saved.getSummary() + "\n" +
+                        "Priority: " + saved.getPriority() + "\n" +
+                        "Category: " + saved.getCategory() + "\n" +
+                        "Email: " + saved.getEmail() + "\n" +
+                        "Status: " + saved.getStatus() + "\n" +
+                        "Created On: " + saved.getCreatedOn();
             }
 
         } catch (Exception e) {
             System.out.println("Error using TicketDatabaseTool: " + e.getMessage());
         }
 
-        // Default
         return query;
     }
 
+    // --------------------- Extractors (unchanged) -----------------------
+    private String extractPriorityFromQuery(String query) {
+        if (query == null || query.isEmpty()) return "MEDIUM";
 
+        query = query.toLowerCase();
 
+        if (query.contains("urgent") || query.contains("immediately") || query.contains("asap")) {
+            return "URGENT";
+        }
+        if (query.contains("high") || query.contains("critical") || query.contains("important")) {
+            return "HIGH";
+        }
+        if (query.contains("medium") || query.contains("normal")) {
+            return "MEDIUM";
+        }
+        if (query.contains("low") || query.contains("not important")) {
+            return "LOW";
+        }
 
+        return "MEDIUM"; // default priority
+    }
 
+    private String extractCategoryFromQuery(String query) {
+        if (query == null || query.isEmpty()) return "others";
 
+        query = query.toLowerCase();
+
+        if (query.contains("wifi") || query.contains("internet") || query.contains("network")) {
+            return "network";
+        }
+        if (query.contains("software") || query.contains("app") || query.contains("application")) {
+            return "software";
+        }
+        if (query.contains("computer") || query.contains("keyboard") || query.contains("mouse")
+                || query.contains("laptop") || query.contains("hardware")) {
+            return "hardware";
+        }
+        if (query.contains("login") || query.contains("password") || query.contains("account")) {
+            return "account";
+        }
+        if (query.contains("payment") || query.contains("bill") || query.contains("invoice")) {
+            return "payment";
+        }
+
+        return "others";
+    }
 
     private String extractUsernameFromQuery(String query) {
         int index = query.indexOf("username");
@@ -265,41 +242,10 @@ public class AIService {
     }
 
     private String extractEmailFromQuery(String query) {
-        java.util.regex.Matcher matcher =
-                java.util.regex.Pattern.compile("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-z]{2,6}")
-                        .matcher(query);
-        if (matcher.find()) {
-            return matcher.group();
-        }
-        return null;
+        var matcher = java.util.regex.Pattern
+                .compile("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-z]{2,6}")
+                .matcher(query);
+        return query;
     }
 
-    private String extractCategoryFromQuery(String query) {
-        if (query.contains("network")) return "Network";
-        if (query.contains("hardware")) return "Hardware";
-        if (query.contains("software")) return "Software";
-        return "General";
-    }
-
-    private String extractPriorityFromQuery(String query) {
-        if (query.contains("urgent")) return "URGENT";
-        if (query.contains("high")) return "HIGH";
-        if (query.contains("medium")) return "MEDIUM";
-        if (query.contains("low")) return "LOW";
-        return "LOW";
-    }
-
-
-
-
-
-//    public String getResponseFromAssistant(String query){
-//        return this.chatClient.prompt()
-//                prompt()
-//                        .tools(ticketDatabaseTool)
-    //.system(systemPromptResources)
-//                .user(query)
-//                .call()
-//                .content();
-//    }
 }
