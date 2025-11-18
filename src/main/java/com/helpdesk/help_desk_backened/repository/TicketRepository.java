@@ -7,5 +7,5 @@ import java.util.Optional;
 
 public interface TicketRepository extends JpaRepository< Ticket,Long> {
 
-    Optional<Ticket> findByEmail(String userName);
+    Ticket findByEmail(String userName);
 }

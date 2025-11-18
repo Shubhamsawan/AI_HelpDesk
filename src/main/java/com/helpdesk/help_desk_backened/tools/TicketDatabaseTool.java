@@ -37,4 +37,12 @@
         public String getCurrentTime(){
             return String.valueOf(System.currentTimeMillis());
         }
+
+
+
+
+        public Ticket getTicketByEmail(String email) {
+            return ticketService.getTicketByEmail(email);
+
+        }
     }

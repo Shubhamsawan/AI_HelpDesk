@@ -115,14 +115,16 @@ public class AIService {
      */
     private String enrichQueryWithTicketData(String query) {
         String lower = query.toLowerCase();
-
+        String email = null;
         try {
             if (lower.contains("create ticket")) {
 
                 String username = extractUsernameFromQuery(lower);
                 String summary = extractSummaryFromQuery(lower);
                 String description = extractDescriptionFromQuery(lower);
-                String email = extractEmailFromQuery(lower);
+                if (lower.contains("create ticket")) {
+                     email = extractEmailFromQuery(lower);
+                }
                 String category = extractCategoryFromQuery(lower);
                 String priorityStr = extractPriorityFromQuery(lower);
 
@@ -136,8 +138,8 @@ public class AIService {
 
                 // Check duplicate ticket
                 Ticket existing = ticketDatabaseTool.getTicketByUserName(username);
-                if (existing != null &&
-                        existing.getSummary().equalsIgnoreCase(summary)) {
+                System.out.println("existing "+existing);
+                if (existing != null ) {
                     return "A similar ticket exists: " + existing;
                 }
 
@@ -151,7 +153,7 @@ public class AIService {
                 newTicket.setStatus(Status.OPEN);
 
                 Ticket saved = ticketDatabaseTool.createTicketTool(newTicket);
-
+                System.out.println(" saved -->"+saved);
                 return "New Ticket Created:\n" +
                         "ID: " + saved.getId() + "\n" +
                         "Summary: " + saved.getSummary() + "\n" +
@@ -160,7 +162,36 @@ public class AIService {
                         "Email: " + saved.getEmail() + "\n" +
                         "Status: " + saved.getStatus() + "\n" +
                         "Created On: " + saved.getCreatedOn();
+            }else if (lower.contains("show ticket") ||
+                    lower.contains("my ticket") ||
+                    lower.contains("ticket detail") ||
+                    lower.contains("view ticket") ||
+                    lower.contains("check ticket") ||
+                    lower.contains("status of my ticket")) {
+
+                 email = extractEmailFromQuery(lower);
+                if (email == null) {
+                    return "Please provide your email so I can check your ticket details.";
+                }
+
+                Ticket ticket = ticketDatabaseTool.getTicketByEmail(email);
+
+                if (ticket == null) {
+                    return "I couldn't find any ticket linked with email: " + email;
+                }
+
+                return "Here are your ticket details:\n" +
+                        "ID: " + ticket.getId() + "\n" +
+                        "User: " + ticket.getUserName() + "\n" +
+                        "Email: " + ticket.getEmail() + "\n" +
+                        "Category: " + ticket.getCategory() + "\n" +
+                        "Priority: " + ticket.getPriority() + "\n" +
+                        "Summary: " + ticket.getSummary() + "\n" +
+                        "Description: " + ticket.getDescription() + "\n" +
+                        "Status: " + ticket.getStatus() + "\n" +
+                        "Created On: " + ticket.getCreatedOn();
             }
+
 
         } catch (Exception e) {
             System.out.println("Error using TicketDatabaseTool: " + e.getMessage());
@@ -245,7 +276,12 @@ public class AIService {
         var matcher = java.util.regex.Pattern
                 .compile("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-z]{2,6}")
                 .matcher(query);
-        return query;
+
+        if (matcher.find()) {
+            return matcher.group();
+        }
+        return null;
     }
+
 
 }

@@ -27,6 +27,11 @@ public class AIController {
     })
     @PostMapping
     public ResponseEntity<String> getResponse(@RequestBody String query){
+        try{
+        return ResponseEntity.ok(aiService.getResponseFromAssistant(query));}
+        catch(Exception e ){
+            e.printStackTrace();
+        }
         return ResponseEntity.ok(aiService.getResponseFromAssistant(query));
     }
 }

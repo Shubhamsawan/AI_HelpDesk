@@ -7,6 +7,8 @@ import lombok.Setter;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
+
 @Service
 @Getter
 @Setter
@@ -33,8 +35,13 @@ public class TicketService {
 
     }
 
+    public Ticket getTicketByEmail(String email) {
+        return ticketRepository.findByEmail(email);
+    }
+
+
     public Ticket getTicketByUserName(String username){
-        return ticketRepository.findByEmail(username).orElse(null);
+        return ticketRepository.findByEmail(username);
     }
 
 }
