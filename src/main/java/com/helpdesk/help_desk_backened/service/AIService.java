@@ -3,6 +3,7 @@ package com.helpdesk.help_desk_backened.service;
 import com.helpdesk.help_desk_backened.entity.Ticket;
 import com.helpdesk.help_desk_backened.enums.Priority;
 import com.helpdesk.help_desk_backened.enums.Status;
+import com.helpdesk.help_desk_backened.tools.EmailTool;
 import com.helpdesk.help_desk_backened.tools.TicketDatabaseTool;
 import lombok.Getter;
 import lombok.Setter;
@@ -26,6 +27,7 @@ public class AIService {
     private final String groqApiUrl;
     private final String groqApiKey;
     private final TicketDatabaseTool ticketDatabaseTool;
+    private final EmailTool emailTool;
     private final ChatMemoryService chatMemoryService;
 
     @Value("classpath:/helpdesk-system.st")
@@ -34,20 +36,21 @@ public class AIService {
     public AIService(RestTemplate restTemplate,
                      @Value("${groq.api.url}") String groqApiUrl,
                      @Value("${groq.api.key}") String groqApiKey,
-                     TicketDatabaseTool ticketDatabaseTool,
+                     TicketDatabaseTool ticketDatabaseTool, EmailTool emailTool,
                      ChatMemoryService chatMemoryService) {
 
         this.restTemplate = restTemplate;
         this.groqApiUrl = groqApiUrl;
         this.groqApiKey = groqApiKey;
         this.ticketDatabaseTool = ticketDatabaseTool;
+        this.emailTool = emailTool;
         this.chatMemoryService = chatMemoryService;
     }
 
     /**
      * Main AI response generator (Groq API)
      */
-    public String getResponseFromAssistant(String query) {
+    public String getResponseFromAssistant(String query, String conversationId) {
         try {
             // Load system prompt
             String systemPrompt;
@@ -123,7 +126,7 @@ public class AIService {
                 String summary = extractSummaryFromQuery(lower);
                 String description = extractDescriptionFromQuery(lower);
                 if (lower.contains("create ticket")) {
-                     email = extractEmailFromQuery(lower);
+                    email = extractEmailFromQuery(lower);
                 }
                 String category = extractCategoryFromQuery(lower);
                 String priorityStr = extractPriorityFromQuery(lower);
@@ -138,8 +141,8 @@ public class AIService {
 
                 // Check duplicate ticket
                 Ticket existing = ticketDatabaseTool.getTicketByUserName(username);
-                System.out.println("existing "+existing);
-                if (existing != null ) {
+                System.out.println("existing " + existing);
+                if (existing != null) {
                     return "A similar ticket exists: " + existing;
                 }
 
@@ -153,7 +156,7 @@ public class AIService {
                 newTicket.setStatus(Status.OPEN);
 
                 Ticket saved = ticketDatabaseTool.createTicketTool(newTicket);
-                System.out.println(" saved -->"+saved);
+                System.out.println(" saved -->" + saved);
                 return "New Ticket Created:\n" +
                         "ID: " + saved.getId() + "\n" +
                         "Summary: " + saved.getSummary() + "\n" +
@@ -162,14 +165,14 @@ public class AIService {
                         "Email: " + saved.getEmail() + "\n" +
                         "Status: " + saved.getStatus() + "\n" +
                         "Created On: " + saved.getCreatedOn();
-            }else if (lower.contains("show ticket") ||
+            } else if (lower.contains("show ticket") ||
                     lower.contains("my ticket") ||
                     lower.contains("ticket detail") ||
                     lower.contains("view ticket") ||
                     lower.contains("check ticket") ||
                     lower.contains("status of my ticket")) {
 
-                 email = extractEmailFromQuery(lower);
+                email = extractEmailFromQuery(lower);
                 if (email == null) {
                     return "Please provide your email so I can check your ticket details.";
                 }
@@ -190,6 +193,31 @@ public class AIService {
                         "Description: " + ticket.getDescription() + "\n" +
                         "Status: " + ticket.getStatus() + "\n" +
                         "Created On: " + ticket.getCreatedOn();
+            } else if (
+                    lower.contains("email support") ||
+                            lower.contains("mail support") ||
+                            lower.contains("send email") ||
+                            lower.contains("contact support") ||
+                            lower.contains("notify support")
+            ) {
+
+                email = extractEmailFromQuery(lower);
+                String message = extractDescriptionFromQuery(lower);
+
+                if (email == null) {
+                    return "Please provide your email so I can notify the support team.";
+                }
+
+                if (message == null || message.isEmpty()) {
+                    message = "User has requested support but no message was provided.";
+                }
+
+                emailTool.sendEmailTOSupportTeam(email, message);
+
+                return "Your message has been sent to our support team.\n" +
+                        "Support Email: " + email + "\n" +
+                        "Message: " + message + "\n" +
+                        "They will contact you soon!";
             }
 
 
