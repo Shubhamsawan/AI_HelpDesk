@@ -7,14 +7,26 @@ import com.helpdesk.help_desk_backened.tools.EmailTool;
 import com.helpdesk.help_desk_backened.tools.TicketDatabaseTool;
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.messages.AssistantMessage;
+
+
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.core.io.Resource;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -29,7 +41,8 @@ public class AIService {
     private final TicketDatabaseTool ticketDatabaseTool;
     private final EmailTool emailTool;
     private final ChatMemoryService chatMemoryService;
-
+    @Autowired
+    private ChatMemory chatMemory;
     @Value("classpath:/helpdesk-system.st")
     private Resource systemPromptResources;
 
@@ -59,7 +72,7 @@ public class AIService {
             }
 
             // Save user msg
-            chatMemoryService.addMessage(query, "User", query);
+            chatMemory.add(conversationId, new UserMessage(query));
 
             // Enrich with DB data
             String enrichedQuery = enrichQueryWithTicketData(query);
@@ -101,7 +114,7 @@ public class AIService {
                 String aiResponse = msg.get("content").toString();
 
                 // save AI response
-                chatMemoryService.addMessage(query, "Assistant", aiResponse);
+                chatMemory.add(conversationId, new AssistantMessage(aiResponse));
 
                 return aiResponse;
             }
@@ -310,6 +323,95 @@ public class AIService {
         }
         return null;
     }
+
+    public void saveMessage(String conversationId, String userMessage, String assistantMessage) {
+
+        chatMemory.add(conversationId, new UserMessage(userMessage));
+
+        chatMemory.add(conversationId, new AssistantMessage(assistantMessage));
+    }
+
+
+    public List<Message> getHistory(String conversationId) {
+        return chatMemory.get(conversationId);
+    }
+
+
+    public String getAssistantResponse(String query, String conversationId) {
+
+        if (conversationId == null || conversationId.isEmpty()) {
+            conversationId = "default"; // fallback
+        }
+
+        // Load system prompt
+        String systemPrompt = "";
+        try (InputStream in = systemPromptResources.getInputStream()) {
+            systemPrompt = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        // Prepare request body for Groq
+        List<Map<String, String>> messages = new ArrayList<>();
+
+        // 1) SYSTEM PROMPT
+        messages.add(Map.of(
+                "role", "system",
+                "content", systemPrompt
+        ));
+
+        // 2) Add chat history from memory
+        List<Message> history = chatMemory.get(conversationId);
+
+        if (history != null) {
+            for (Message m : history) {
+
+                String role = (m instanceof UserMessage) ? "user" : "assistant";
+
+                String text = m.getText();   // FIXED
+
+                messages.add(Map.of(
+                        "role", role,
+                        "content", text
+                ));
+            }
+        }
+
+
+
+
+        // 3) Add new user message
+        messages.add(Map.of(
+                "role", "user",
+                "content", query
+        ));
+
+        // Prepare request
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("model", "llama-3.1-8b-instant");
+        requestBody.put("messages", messages);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(groqApiKey);
+
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+
+        // REST call
+        ResponseEntity<Map> response =
+                restTemplate.postForEntity(groqApiUrl, entity, Map.class);
+
+        // Extract assistant response
+        Map choice = (Map) ((List) response.getBody().get("choices")).get(0);
+        Map msg = (Map) choice.get("message");
+        String assistantReply = msg.get("content").toString();
+        System.out.println(conversationId+" "+query+" "+assistantReply);
+        // Save messages in memory
+        saveMessage(conversationId, query, assistantReply);
+
+        return assistantReply;
+    }
+
 
 
 }

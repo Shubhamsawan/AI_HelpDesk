@@ -6,6 +6,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping("api/v1/ai")
@@ -26,5 +28,15 @@ public class AIController {
     public ResponseEntity<String> getResponse(@RequestBody String query, @RequestHeader(value = "ConversationId",required = false) String conversationId){
 
         return ResponseEntity.ok(aiService.getResponseFromAssistant(query,conversationId));
+    }
+
+    @Operation(summary = "Get AI response")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "AI response returned")
+    })
+    @PostMapping(value = "/stream")
+    public  String getAssistantResponse(@RequestBody String query, @RequestHeader(value = "ConversationId",required = false) String conversationId){
+
+        return aiService.getAssistantResponse(query,conversationId);
     }
 }
