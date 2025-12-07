@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: help-desk-backened
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/helpdesk?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+    database-platform: org.hibernate.dialect.MySQL8Dialect
+
+  ai:
+    chat:
+      memory:
+        repository:
+          type: jdbc
+          initialize-schema: always
+
+# Your custom Gemini API settings (must be at root level, not nested under spring)  
+#gemini:
+#  api:
+#    key: "AIzaSyC-MUhEE7n4oKH7z-wnISfvRGHIiaII2zo"
+#    url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+
+groq:
+  api:
+    key: ""
+    url: "https://api.groq.com/openai/v1/chat/completions"
+
+
+server:
+  port: 8081
+
+logging:
+  level:
+    com.helpdesk: DEBUG
+    org.springframework.web: INFO
